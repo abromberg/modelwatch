@@ -1,0 +1,83 @@
+# A lane is "the newest model of this kind". Each model in .github/modelwatch.yml follows one, inferred from the
+# model (the first lane whose match or alias fits it) unless the registry names one.
+# A registry can add lanes, or override these by name, under `lanes:`.
+#
+# Resolution (Catalog.resolveLane in src/models.ts), against OpenRouter's model list plus the providers' own
+# lists, for each provider key on the runner repo:
+#   alias: an OpenRouter "~...-latest" alias; its alias_target is the lane's current model. Without a match,
+#     the lane fits models in the target's family at any version (~x-ai/grok-latest -> x-ai/grok-5 fits
+#     x-ai/grok-4, not x-ai/grok-4-fast).
+#   match: a regex over `provider/model` ids; the newest match wins (by release date, or by the version in
+#     the ID when there's no date). With an alias too, it only adds models from a provider's own API
+#     (when its key is set), so a lane can move before OpenRouter lists the new model. Anthropic's
+#     API spells versions with dashes (claude-sonnet-5-5), so its patterns accept both.
+# Lane values are OpenRouter slugs, or `provider/model` from a provider API; src/format.ts converts them to
+# the repo's spelling.
+#
+# A model is placed by its ID, and also with any date, -preview, -exp or -latest suffix removed
+# (claude-sonnet-4-5-20250929, gemini-3-flash-preview, gpt-4o-2024-08-06), so patterns name the family alone.
+# Patterns for families that only ship dated IDs (Qwen, Mistral) accept the date, so the dated model can be a target.
+# A line that has stopped getting new versions keeps a lane, so its models show as current instead of failing.
+
+# Anthropic's pre-4 IDs put the version first (claude-3-5-sonnet), so these accept both orders.
+anthropic-opus:    { alias: "~anthropic/claude-opus-latest", match: '^anthropic/claude-(opus-\d+([.-]\d+)?|\d+([.-]\d+)?-opus)$' }
+anthropic-sonnet:  { alias: "~anthropic/claude-sonnet-latest", match: '^anthropic/claude-(sonnet-\d+([.-]\d+)?|\d+([.-]\d+)?-sonnet)$' }
+anthropic-haiku:   { alias: "~anthropic/claude-haiku-latest", match: '^anthropic/claude-(haiku-\d+([.-]\d+)?|\d+([.-]\d+)?-haiku)$' }
+anthropic-fable:   { alias: "~anthropic/claude-fable-latest", match: '^anthropic/claude-fable-\d+([.-]\d+)?$' }
+
+# OpenAI's tier names: astra (flagship), sol (near-flagship), terra (balanced, 5.6 only), luna (cheap).
+openai-astra:      { alias: "~openai/gpt-astra-latest", match: '^openai/gpt-\d+(\.\d+)?-astra$' }
+openai-sol:        { alias: "~openai/gpt-sol-latest", match: '^openai/gpt-\d+(\.\d+)?-sol$' }
+openai-terra:      { alias: "~openai/gpt-terra-latest", match: '^openai/gpt-\d+(\.\d+)?-terra$' }
+openai-luna:       { alias: "~openai/gpt-luna-latest", match: '^openai/gpt-\d+(\.\d+)?-luna$' }
+openai-astra-pro:  { match: '^openai/gpt-\d+(\.\d+)?-astra-pro$' }
+openai-sol-pro:    { match: '^openai/gpt-\d+(\.\d+)?-sol-pro$' }
+openai-terra-pro:  { match: '^openai/gpt-\d+(\.\d+)?-terra-pro$' }
+openai-luna-pro:   { match: '^openai/gpt-\d+(\.\d+)?-luna-pro$' }
+# The numbered line before the tiers (gpt-4, gpt-4o, gpt-5.5), which ends at gpt-5.5.
+openai-gpt:        { match: '^openai/(chat)?gpt-(\d+(\.\d+)?|4o)(-turbo)?$' }
+openai-mini:       { alias: "~openai/gpt-mini-latest", match: '^openai/gpt-(\d+(\.\d+)?|4o)-mini$' }
+openai-nano:       { match: '^openai/gpt-(\d+(\.\d+)?|4o)-nano$' }
+openai-pro:        { match: '^openai/gpt-\d+(\.\d+)?-pro$' }
+openai-chat:       { match: '^openai/gpt-\d+(\.\d+)?-chat$' }
+openai-codex:      { match: '^openai/gpt-\d+(\.\d+)?-codex$' }
+openai-codex-mini: { match: '^openai/gpt-\d+(\.\d+)?-codex-mini$' }
+openai-codex-max:  { match: '^openai/gpt-\d+(\.\d+)?-codex-max$' }
+# The o-series reasoning models, which ended at o3 and o4-mini.
+openai-o:          { match: '^openai/o\d+$' }
+openai-o-mini:     { match: '^openai/o\d+-mini$' }
+openai-o-pro:      { match: '^openai/o\d+-pro$' }
+
+gemini-pro:        { alias: "~google/gemini-pro-latest", match: '^google/gemini-\d+(\.\d+)?-pro$' }
+gemini-flash:      { alias: "~google/gemini-flash-latest", match: '^google/gemini-\d+(\.\d+)?-flash$' }
+gemini-flash-lite: { match: '^google/gemini-\d+(\.\d+)?-flash-lite$' }
+# GA image models only. "Nano Banana" releases use a separate naming line and aren't a lane yet.
+gemini-image-pro:   { match: '^google/gemini-\d+(\.\d+)?-pro-image$' }
+gemini-image-flash: { match: '^google/gemini-\d+(\.\d+)?-flash-image$' }
+
+grok:              { alias: "~x-ai/grok-latest" }
+grok-build:        { match: '^x-ai/grok-build-\d+(\.\d+)?$' }
+# DeepSeek's aliases point at dated IDs (deepseek-v4-pro-0813), so these name the family explicitly.
+deepseek-flash:    { alias: "~deepseek/deepseek-flash-latest", match: '^deepseek/deepseek-v\d+(\.\d+)?-flash$' }
+deepseek-pro:      { alias: "~deepseek/deepseek-pro-latest", match: '^deepseek/deepseek-v\d+(\.\d+)?-pro$' }
+# Before the flash/pro split; ends at deepseek-v3.2 and deepseek-r1.
+deepseek-v3:       { match: '^deepseek/deepseek-(chat|chat-v\d+(\.\d+)?|v\d+(\.\d+)?)$' }
+deepseek-r:        { match: '^deepseek/deepseek-r\d+$' }
+glm:               { alias: "~z-ai/glm-latest" }
+glm-flash:         { alias: "~z-ai/glm-flash-latest" }
+glm-air:           { match: '^z-ai/glm-\d+(\.\d+)?-air$' }
+glm-turbo:         { match: '^z-ai/glm-\d+(\.\d+)?-turbo$' }
+kimi:              { alias: "~moonshotai/kimi-latest" }
+minimax:           { match: '^minimax/minimax-m\d+(\.\d+)?$' }
+meta-muse-spark:   { match: '^meta/muse-spark-\d+(\.\d+)?$' }
+
+qwen-max:          { match: '^qwen/qwen\d+(\.\d+)?-max(-\d{4})?$' }
+qwen-plus:         { match: '^qwen/qwen(\d+(\.\d+)?)?-plus(-\d{2}-\d{2}|-\d{8})?$' }
+qwen-flash:        { match: '^qwen/qwen\d+(\.\d+)?-flash(-\d{2}-\d{2})?$' }
+qwen-coder:        { match: '^qwen/qwen\d+(\.\d+)?-coder$' }
+
+mistral-large:     { match: '^mistralai/mistral-large(-\d+(-\d+)?)?$' }
+mistral-medium:    { match: '^mistralai/mistral-medium(-\d+([.-]\d+)?)?$' }
+mistral-small:     { match: '^mistralai/mistral-small(-\d+(\.\d+)?)?(-24b-instruct)?(-\d{4})?$' }
+codestral:         { match: '^mistralai/codestral(-\d{4})?$' }
+devstral:          { match: '^mistralai/devstral(-\d{4})?$' }

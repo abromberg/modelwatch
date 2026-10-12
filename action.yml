@@ -1,0 +1,84 @@
+name: modelwatch
+description: Opens PRs that move the LLM model IDs your repos pin to newer models, as a GitHub App
+branding: { icon: refresh-cw, color: blue }
+
+inputs:
+  command:
+    description: "`run` checks the repos; `list` only outputs them as `repos`, a JSON list for a job matrix"
+    default: run
+  app-id:
+    description: Your modelwatch App's ID
+    required: true
+  app-private-key:
+    description: Your modelwatch App's private key
+    required: true
+  openrouter-api-key:
+    description: OpenRouter API key for the agent that edits code (not needed to list)
+    default: ""
+  anthropic-api-key:
+    description: Optional. Also checks Anthropic's own model list, for models OpenRouter doesn't list
+    default: ""
+  openai-api-key:
+    description: Optional. Also checks OpenAI's own model list
+    default: ""
+  gemini-api-key:
+    description: Optional. Also checks the Gemini API's model list
+    default: ""
+  repos:
+    description: Only these repos (owner/name, comma-separated); default every repo the App is installed on
+    default: ""
+  agent-model:
+    description: OpenRouter model for the agent (overrides agent_model in each registry)
+    default: ""
+  dry-run:
+    description: Run the agents and show the PRs in the run summary, without opening them
+    default: "false"
+  timeout-minutes:
+    description: Time limit for each agent run
+    default: "20"
+
+outputs:
+  repos:
+    description: "With `command: list`, the repos to check, as a JSON list"
+    value: ${{ steps.main.outputs.repos }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4 # modelwatch and Pi need Node 22.19+
+      with: { node-version: 24 }
+    - shell: bash
+      run: npm ci --prefix "$GITHUB_ACTION_PATH" --no-audit --no-fund --loglevel=error
+
+    # The agent reads untrusted repo content, so it must not be able to reach the App's key. On GitHub's
+    # runners, sudo and Docker each amount to root, which could read it from this job's memory: take both away.
+    - if: runner.environment == 'github-hosted' && inputs.command == 'run'
+      shell: bash
+      run: |
+        sudo sh -c '[ "$(cat /proc/sys/kernel/yama/ptrace_scope)" = 0 ] && echo 1 > /proc/sys/kernel/yama/ptrace_scope
+          chmod 600 /var/run/docker.sock 2>/dev/null; rm -f /etc/sudoers.d/*'
+        if sudo -n true 2>/dev/null; then echo "::warning::sudo still works on this runner"; fi
+    # Secrets reach modelwatch in a file it deletes on start, never in its environment, which processes it
+    # starts could read.
+    - shell: bash
+      env:
+        APP_ID: ${{ inputs.app-id }}
+        APP_PRIVATE_KEY: ${{ inputs.app-private-key }}
+        OPENROUTER_API_KEY: ${{ inputs.openrouter-api-key }}
+        ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
+        OPENAI_API_KEY: ${{ inputs.openai-api-key }}
+        GEMINI_API_KEY: ${{ inputs.gemini-api-key }}
+      run: |
+        umask 077
+        node -e 'const e = process.env; require("fs").writeFileSync(process.argv[1], JSON.stringify({
+          app_id: e.APP_ID, app_private_key: e.APP_PRIVATE_KEY, openrouter_api_key: e.OPENROUTER_API_KEY,
+          anthropic_api_key: e.ANTHROPIC_API_KEY, openai_api_key: e.OPENAI_API_KEY, gemini_api_key: e.GEMINI_API_KEY }))' \
+          "$RUNNER_TEMP/modelwatch-secrets.json"
+    - id: main
+      shell: bash
+      run: node "$GITHUB_ACTION_PATH/src/main.ts" ${{ inputs.command == 'list' && '--list' || '' }} ${{ inputs.dry-run == 'true' && '--dry-run' || '' }}
+      env:
+        MODELWATCH_SECRETS: ${{ runner.temp }}/modelwatch-secrets.json
+        MODELWATCH_REPOS: ${{ inputs.repos }}
+        MODELWATCH_AGENT_MODEL: ${{ inputs.agent-model }}
+        MODELWATCH_TIMEOUT_MINUTES: ${{ inputs.timeout-minutes }}

@@ -1,0 +1,15 @@
+{
+  "name": "modelwatch",
+  "private": true,
+  "type": "module",
+  "description": "Opens PRs that move the LLM model IDs in your repo to the newest models.",
+  "license": "MIT",
+  "engines": { "node": ">=22.19" },
+  "scripts": {
+    "test": "node --test 'src/*.test.ts'"
+  },
+  "dependencies": {
+    "@earendil-works/pi-coding-agent": "1.1.0",
+    "yaml": "2.8.1"
+  }
+}

@@ -1,0 +1,63 @@
+# modelwatch runner: checks every repo your modelwatch App is installed on and opens PRs when a pinned model
+# has a newer version (https://github.com/abromberg/modelwatch). Keep this repo private: its run logs include
+# output from your other repos.
+#
+# `uses:` is pinned to a commit, so modelwatch only changes when you choose: `node src/setup.ts --upgrade`
+# from a modelwatch checkout shows what changed, then moves the pin and refreshes this file.
+name: modelwatch
+on:
+  schedule:
+    - cron: "0 15 * * 1" # Mondays
+  workflow_dispatch:
+    inputs:
+      repos:
+        description: Only these repos (owner/name, comma-separated); blank = all
+      agent-model:
+        description: OpenRouter model for the agent this run (blank = registry or default)
+      dry-run:
+        description: Run the agents and show the PRs in the run summary, without opening them
+        type: boolean
+
+permissions: {} # the App's tokens do the work
+
+concurrency: modelwatch
+
+jobs:
+  repos:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      repos: ${{ steps.list.outputs.repos }}
+    steps:
+      - id: list
+        uses: abromberg/modelwatch@main
+        with:
+          command: list
+          app-id: ${{ secrets.MODELWATCH_APP_ID }}
+          app-private-key: ${{ secrets.MODELWATCH_APP_PRIVATE_KEY }}
+          repos: ${{ inputs.repos }}
+
+  # One job per repo, each on a fresh machine, so an agent never shares one with another repo's code.
+  modelwatch:
+    needs: repos
+    if: needs.repos.outputs.repos != '[]'
+    name: ${{ matrix.repo }}
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        repo: ${{ fromJSON(needs.repos.outputs.repos) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: abromberg/modelwatch@main
+        with:
+          app-id: ${{ secrets.MODELWATCH_APP_ID }}
+          app-private-key: ${{ secrets.MODELWATCH_APP_PRIVATE_KEY }}
+          openrouter-api-key: ${{ secrets.OPENROUTER_API_KEY }}
+          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }} # optional, as are the next two
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          gemini-api-key: ${{ secrets.GEMINI_API_KEY }}
+          repos: ${{ matrix.repo }}
+          agent-model: ${{ inputs.agent-model }}
+          dry-run: ${{ inputs.dry-run }}
